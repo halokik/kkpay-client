@@ -1,5 +1,7 @@
 """Exception hierarchy."""
 
+from __future__ import annotations
+
 
 class KKPayError(Exception):
     """Base error for all client failures."""
@@ -24,4 +26,3 @@ class KKPayAPIError(KKPayError):
 
 class KKPaySignatureError(KKPayError):
     """A callback signature is missing or invalid."""
-
