@@ -6,16 +6,16 @@ KK 收款网关的 Python SDK，支持同步/异步下单、查单、取消、�
 
 ## 安装
 
-仓库为私有仓库时，推荐固定版本标签安装：
+仓库已公开，推荐固定版本标签安装，避免生产项目意外跟随 `main`：
 
 ```bash
-pip install "kkpay-client @ git+ssh://git@github.com/halokik/kkpay-client.git@v0.2.0"
+pip install "kkpay-client @ git+https://github.com/halokik/kkpay-client.git@v0.2.0"
 ```
 
 也可以写入项目的 `requirements.txt`：
 
 ```text
-kkpay-client @ git+ssh://git@github.com/halokik/kkpay-client.git@v0.2.0
+kkpay-client @ git+https://github.com/halokik/kkpay-client.git@v0.2.0
 ```
 
 本机开发：
@@ -24,7 +24,7 @@ kkpay-client @ git+ssh://git@github.com/halokik/kkpay-client.git@v0.2.0
 pip install -e /opt/kkpay-client
 ```
 
-私有 PyPI 的构建和上传方式见 [`docs/PRIVATE_INSTALL.md`](docs/PRIVATE_INSTALL.md)。
+安装、发布及私有部署方式见 [`docs/INSTALL.md`](docs/INSTALL.md)。
 
 ## 异步下单
 

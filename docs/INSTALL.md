@@ -1,16 +1,18 @@
-# 私有安装与发布
+# 安装、发布与私有部署
 
-## 推荐：私有 Git 固定标签
+## 推荐：公开 Git 固定标签
 
-这是目前最简单、最少运维的方案，不需要额外部署包索引服务。
+这是目前最简单、最少运维的方案，不需要额外部署包索引服务或配置 GitHub 凭据。
 
 ```bash
-pip install "kkpay-client @ git+ssh://git@github.com/halokik/kkpay-client.git@v0.2.0"
+pip install "kkpay-client @ git+https://github.com/halokik/kkpay-client.git@v0.2.0"
 ```
 
-要求部署机器已经配置只读 GitHub Deploy Key，或使用有权读取私有仓库的 SSH Key。不要把 GitHub Token 写进 `requirements.txt`。
+生产项目应固定版本标签，不要直接跟随 `main`。升级时先在 SDK 仓库运行测试并创建新标签，再在机器人项目中修改标签版本。
 
-升级时先在 SDK 仓库运行测试并创建新标签，然后在机器人项目中修改标签版本。生产项目不要直接跟随 `main`。
+## 可选：内部私有分发
+
+若需在内网或私有 fork 中分发，可通过只读 Deploy Key 或私有 PyPI 安装。不要把 GitHub Token 写进 `requirements.txt`。
 
 ## 可选：上传到已有私有 PyPI
 

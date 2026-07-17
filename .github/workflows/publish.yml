@@ -1,4 +1,4 @@
-name: Build private package
+name: Build package
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  build-private-artifact:
+  build-artifact:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
