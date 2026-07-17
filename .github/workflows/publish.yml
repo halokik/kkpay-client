@@ -1,15 +1,15 @@
-name: Publish to PyPI
+name: Build private package
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
+  push:
+    tags: ["v*"]
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  build-private-artifact:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,18 +22,4 @@ jobs:
         with:
           name: python-package-distributions
           path: dist/
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/kkpay-client
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: python-package-distributions
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+          retention-days: 30

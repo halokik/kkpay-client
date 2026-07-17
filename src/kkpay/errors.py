@@ -26,3 +26,11 @@ class KKPayAPIError(KKPayError):
 
 class KKPaySignatureError(KKPayError):
     """A callback signature is missing or invalid."""
+
+
+class KKPayCallbackError(KKPayError, ValueError):
+    """A signed callback is malformed or does not match the local order."""
+
+
+class KKPayIdempotencyError(KKPayError):
+    """A webhook idempotency record is invalid or conflicts with stored data."""

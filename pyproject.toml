@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kkpay-client"
-version = "0.1.0"
-description = "Typed sync and async Python client for KKPay-compatible payment gateways"
+version = "0.2.0"
+description = "Typed sync and async Python SDK for KKPay-compatible payment gateways"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -40,4 +40,3 @@ packages = ["src/kkpay"]
 [tool.pytest.ini_options]
 addopts = "-q"
 asyncio_mode = "auto"
-

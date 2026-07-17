@@ -1,7 +1,15 @@
 import httpx
 import pytest
 
-from kkpay import AsyncKKPayClient, KKPayClient, KKPayConfigurationError, OrderStatus, make_signature
+from kkpay import (
+    AsyncKKPayClient,
+    KKPayCallbackError,
+    KKPayClient,
+    KKPayConfigurationError,
+    OrderStatus,
+    RetryPolicy,
+    make_signature,
+)
 
 
 def handler(request: httpx.Request) -> httpx.Response:
@@ -39,8 +47,14 @@ def test_public_http_is_secure_by_default():
 
 def test_sync_order_lifecycle():
     api = client()
-    order = api.create_order(order_id="O1", amount=100, notify_url="https://bot.example/notify")
+    order = api.create_order(
+        order_id="O1",
+        amount=100,
+        notify_url="https://bot.example/notify",
+        redirect_url="https://t.me/example_bot",
+    )
     assert order.actual_amount == "13.89"
+    assert order.address == "TAddress"
     assert order.status is OrderStatus.WAITING
     assert api.query_order("T1").status is OrderStatus.PAID
     assert api.cancel_order("T1") == "T1"
@@ -62,12 +76,75 @@ def test_callback_verification():
     assert callback.status is OrderStatus.PAID
 
 
+def test_callback_can_be_bound_to_local_amounts_and_address():
+    api = client()
+    payload = {
+        "trade_id": "T1",
+        "order_id": "O1",
+        "amount": 100,
+        "actual_amount": "13.890",
+        "token": "TAddress",
+        "block_transaction_id": "hash",
+        "status": 2,
+    }
+    payload["signature"] = make_signature(payload, "secret")
+    callback = api.verify_callback(
+        payload,
+        expected_amount="100.00",
+        expected_actual_amount="13.89",
+        expected_address="TAddress",
+    )
+    assert callback.idempotency_key == "T1:hash"
+
+    with pytest.raises(KKPayCallbackError):
+        api.verify_callback(payload, expected_amount=101)
+
+
+def test_payload_normalizes_amount_and_requires_redirect():
+    api = client()
+    with pytest.raises(ValueError, match="redirect_url"):
+        api.create_payload(order_id="O1", amount=100, notify_url="https://bot.example/notify")
+    payload = api.create_payload(
+        order_id="O1",
+        amount="100.5000",
+        notify_url="https://bot.example/notify",
+        redirect_url="https://t.me/example_bot",
+    )
+    assert payload["amount"] == "100.5"
+
+
+def test_transient_gateway_failure_is_retried():
+    calls = 0
+
+    def retry_handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            return httpx.Response(503, text="busy")
+        return handler(request)
+
+    api = KKPayClient(
+        "https://pay.example",
+        "demo",
+        "secret",
+        retry_policy=RetryPolicy(attempts=3, backoff_seconds=0),
+        transport=httpx.MockTransport(retry_handler),
+    )
+    result = api.query_order("T1")
+    assert result.status is OrderStatus.PAID
+    assert calls == 3
+
+
 @pytest.mark.asyncio
 async def test_async_order_lifecycle():
     api = AsyncKKPayClient(
         "https://pay.example", "demo", "secret", transport=httpx.MockTransport(handler)
     )
-    order = await api.create_order(order_id="O1", amount=100, notify_url="https://bot.example/notify")
+    order = await api.create_order(
+        order_id="O1",
+        amount=100,
+        notify_url="https://bot.example/notify",
+        redirect_url="https://t.me/example_bot",
+    )
     assert order.trade_id == "T1"
     assert (await api.query_order("T1")).status is OrderStatus.PAID
-
