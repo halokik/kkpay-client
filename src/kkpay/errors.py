@@ -34,3 +34,19 @@ class KKPayCallbackError(KKPayError, ValueError):
 
 class KKPayIdempotencyError(KKPayError):
     """A webhook idempotency record is invalid or conflicts with stored data."""
+
+
+class KKPayPaymentError(KKPayError):
+    """A local payment record cannot be created or transitioned safely."""
+
+
+class KKPayPaymentNotFoundError(KKPayPaymentError, LookupError):
+    """No local payment record exists for the referenced merchant order."""
+
+
+class KKPayOrderConflictError(KKPayPaymentError):
+    """A local order or gateway trade identifier is already bound to another payment."""
+
+
+class KKPayQRCodeError(KKPayError):
+    """A payment QR image cannot be generated."""

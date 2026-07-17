@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 - 2026-07-17
+
+- Add complete merchant-side payment orchestration with a durable SQLite order ledger.
+- Add payment checkout QR PNG generation from the expiring gateway payment URL.
+- Add callback-to-order binding, fulfillment leases, duplicate suppression, failure retry, and safe cancellation helpers.
+- Add synchronous and asyncio-native payment services plus an optional FastAPI webhook router.
+- Keep chain monitoring, addresses, private keys, and merchant administration in the gateway rather than the public SDK.
+
 ## 0.2.0 - 2026-07-17
 
 - Add persistent SQLite callback idempotency with failure retry and stale-lock recovery.
