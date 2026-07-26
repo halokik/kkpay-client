@@ -15,6 +15,10 @@ class KKPayHTTPError(KKPayError):
     """The gateway could not be reached or returned invalid HTTP."""
 
 
+class KKPayChainError(KKPayError):
+    """The configured self-hosted TRON endpoint could not be queried safely."""
+
+
 class KKPayAPIError(KKPayError):
     """The gateway returned a valid error response."""
 

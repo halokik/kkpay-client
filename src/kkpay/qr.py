@@ -1,8 +1,9 @@
-"""Local QR-code helpers for KKPay checkout links.
+"""Local QR-code helpers for checkout links and direct TRON payments.
 
-The QR code deliberately contains the gateway ``payment_url`` rather than a
-bare receiving address.  A checkout URL is network-aware, expires with the
-order, and shows the exact amount before the user transfers funds.
+Gateway-mode QR codes encode the expiring checkout URL.  Standalone direct
+mode deliberately encodes the operator's checksum-valid T-address, so users
+do not need to open a package-author checkout host.  Direct callers must show
+the exact ``actual_amount`` alongside the QR image.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .errors import KKPayQRCodeError
+from .tron import is_valid_tron_address
 
 
 def payment_qr_payload(payment: Any) -> str:
@@ -24,9 +26,18 @@ def payment_qr_payload(payment: Any) -> str:
 
     value = str(getattr(payment, "payment_url", "") or "").strip()
     parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise KKPayQRCodeError("payment_url must be an absolute HTTP(S) URL")
-    return value
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return value
+
+    # DirectPaymentService uses the raw T-address as payment_url.  Do not
+    # accept arbitrary QR text here: only a checksum-valid address is safe to
+    # render as a direct payment target.
+    address = str(getattr(payment, "address", "") or "").strip()
+    if value == address and is_valid_tron_address(address):
+        return address
+    raise KKPayQRCodeError(
+        "payment_url must be an absolute HTTP(S) URL or a checksum-valid direct TRON address"
+    )
 
 
 def make_qr_png(
@@ -91,6 +102,6 @@ def make_qr_png(
 
 
 def payment_qr_png(payment: Any, **kwargs: Any) -> bytes:
-    """Render a checkout-link QR PNG for an ``Order`` or local ``Payment``."""
+    """Render a gateway-checkout or direct-TRON QR PNG."""
 
     return make_qr_png(payment_qr_payload(payment), **kwargs)

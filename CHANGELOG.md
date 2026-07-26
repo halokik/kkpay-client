@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 - 2026-07-26
+
+- Add `DirectPaymentService` and `AsyncDirectPaymentService`: standalone TRON collection that does not call a KKPay gateway or a package-author IP.
+- Add direct confirmed-chain transfer listing and transaction-detail verification for USDT-TRC20 and native TRX.
+- Add atomic unique exact-amount reservation, local expiry/cancellation, direct QR address encoding, and SQLite-backed exactly-once fulfillment after verified chain settlement.
+- Keep legacy `KKPayClient` / `PaymentService` APIs as an explicit compatibility mode for existing gateway deployments.
+
 ## 0.3.0 - 2026-07-17
 
 - Add complete merchant-side payment orchestration with a durable SQLite order ledger.

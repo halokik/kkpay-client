@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kkpay-client"
-version = "0.3.0"
-description = "Complete merchant-side USDT/TRX collection SDK for KKPay-compatible gateways"
+version = "0.4.0"
+description = "Self-hosted direct USDT-TRC20/TRX collection SDK with optional KKPay gateway compatibility"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }

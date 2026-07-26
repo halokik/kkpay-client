@@ -1,10 +1,10 @@
-"""Merchant-side payment orchestration for KKPay-compatible gateways.
+"""Merchant-side payment orchestration for gateway and direct-chain payments.
 
 This module intentionally owns the application-facing payment lifecycle:
 creating a local record, rendering the checkout payload, validating a signed
-callback against that record, and claiming fulfillment exactly once.  It does
-not own private keys, address pools, or chain monitoring; those remain in the
-gateway service where they can be operated and secured centrally.
+callback against that record, and claiming fulfillment exactly once.  The
+legacy services use a KKPay-compatible gateway; :mod:`kkpay.direct` instead
+verifies confirmed TRON transfers directly and never contacts that gateway.
 """
 
 from __future__ import annotations
@@ -62,12 +62,13 @@ def _amounts_equal(left: Any, right: Any) -> bool:
 
 @dataclass(frozen=True)
 class Payment:
-    """A persisted payment intent returned by the gateway.
+    """A persisted payment intent from a gateway or direct TRON service.
 
-    ``status`` is the gateway order status.  A status of ``PAID`` becomes safe
-    to fulfill only through a verified callback and a successful
-    ``PaymentClaim``; polling is useful for presentation and reconciliation but
-    is not a fulfillment authorization mechanism.
+    A status of ``PAID`` becomes safe to fulfill only through a verified source
+    (a signed gateway callback or a direct confirmed-chain verification) and a
+    successful ``PaymentClaim``.  A direct service may use polling as that
+    verified source; a legacy gateway service must not fulfill merely from an
+    unsigned status query.
     """
 
     order_id: str
@@ -188,7 +189,8 @@ class SQLitePaymentStore:
     """A durable local payment ledger with callback-safe fulfillment leases.
 
     Keep this database private to one merchant application.  It stores order
-    data and application metadata but never stores the merchant API token.
+    data and application metadata but never stores a merchant API token or a
+    wallet private key.
     """
 
     def __init__(self, path: str | Path, *, stale_after_seconds: float = 300.0) -> None:
@@ -347,6 +349,90 @@ class SQLitePaymentStore:
             raise KKPayPaymentError("payment was not saved")
         return self._row_to_payment(row)
 
+    def create_direct_payment(
+        self,
+        order: Order,
+        *,
+        trade_type: str = TradeType.USDT_TRC20,
+        metadata: Mapping[str, Any] | None = None,
+        now: float | None = None,
+    ) -> Payment:
+        """Persist a direct-chain payment and atomically reserve its amount.
+
+        A self-hosted collector may use one receiving address for several
+        active orders.  Exact on-chain amounts are therefore reserved while an
+        order is waiting, so a single transfer cannot satisfy two open orders.
+        Expired, cancelled, and paid orders no longer reserve their amount.
+        """
+
+        timestamp = time.time() if now is None else float(now)
+        timeout = max(0, int(order.expiration_time or 0))
+        expires_at = timestamp + timeout if timeout else None
+        normalized_trade_type = str(trade_type or TradeType.USDT_TRC20)
+        actual_amount = _amount_text(order.actual_amount)
+        record = (
+            order.order_id,
+            order.trade_id,
+            _amount_text(order.amount),
+            actual_amount,
+            order.address,
+            normalized_trade_type,
+            order.payment_url,
+            int(order.status),
+            timestamp,
+            timestamp,
+            expires_at,
+            self._metadata_json(metadata),
+        )
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                reserved = self._connection.execute(
+                    """
+                    SELECT order_id FROM kkpay_payments
+                    WHERE address = ? AND trade_type = ? AND actual_amount = ?
+                      AND gateway_status = ?
+                      AND (expires_at IS NULL OR expires_at > ?)
+                    LIMIT 1
+                    """,
+                    (
+                        order.address,
+                        normalized_trade_type,
+                        actual_amount,
+                        int(OrderStatus.WAITING),
+                        timestamp,
+                    ),
+                ).fetchone()
+                if reserved is not None:
+                    raise KKPayOrderConflictError(
+                        "actual_amount is already reserved by an active direct payment"
+                    )
+                self._connection.execute(
+                    """
+                    INSERT INTO kkpay_payments (
+                        order_id, trade_id, amount, actual_amount, address, trade_type,
+                        payment_url, gateway_status, created_at, updated_at, expires_at,
+                        metadata_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    record,
+                )
+                row = self._row_for_order(order.order_id)
+                self._connection.execute("COMMIT")
+            except sqlite3.IntegrityError as exc:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise KKPayOrderConflictError(
+                    "a payment with this order_id or trade_id already exists"
+                ) from exc
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        if row is None:  # pragma: no cover - SQLite invariant guard
+            raise KKPayPaymentError("payment was not saved")
+        return self._row_to_payment(row)
+
     def get_by_order_id(self, order_id: str) -> Payment | None:
         """Return a local payment by merchant order identifier."""
 
@@ -369,6 +455,24 @@ class SQLitePaymentStore:
             ).fetchone()
         return self._row_to_payment(row) if row is not None else None
 
+    def list_open_payments(self, *, limit: int = 100) -> list[Payment]:
+        """Return waiting or paid records that may still need local handling."""
+
+        safe_limit = int(limit)
+        if safe_limit < 1 or safe_limit > 10000:
+            raise ValueError("limit must be between 1 and 10000")
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT * FROM kkpay_payments
+                WHERE gateway_status IN (?, ?)
+                ORDER BY created_at ASC, order_id ASC
+                LIMIT ?
+                """,
+                (int(OrderStatus.WAITING), int(OrderStatus.PAID), safe_limit),
+            ).fetchall()
+        return [self._row_to_payment(row) for row in rows]
+
     def mark_cancelled(self, order_id: str) -> Payment:
         """Record a successful gateway cancellation without touching paid orders."""
 
@@ -390,6 +494,44 @@ class SQLitePaymentStore:
                         "UPDATE kkpay_payments SET gateway_status = ?, updated_at = ? "
                         "WHERE order_id = ?",
                         (int(OrderStatus.CANCELLED), now, order_id),
+                    )
+                row = self._row_for_order(order_id)
+                self._connection.execute("COMMIT")
+            except Exception:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
+        if row is None:  # pragma: no cover - transaction invariant guard
+            raise KKPayPaymentNotFoundError("local payment was not found")
+        return self._row_to_payment(row)
+
+    def expire_if_due(self, order_id: str, *, now: float | None = None) -> Payment:
+        """Expire one still-waiting record after its local timeout.
+
+        Direct-chain callers should first scan the full order time window, then
+        call this method only if no matching confirmed transfer was found.
+        """
+
+        order_id = str(order_id or "").strip()
+        if not order_id:
+            raise KKPayPaymentNotFoundError("order_id must not be empty")
+        timestamp = time.time() if now is None else float(now)
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN IMMEDIATE")
+                row = self._row_for_order(order_id)
+                if row is None:
+                    raise KKPayPaymentNotFoundError("local payment was not found")
+                payment = self._row_to_payment(row)
+                if (
+                    payment.status is OrderStatus.WAITING
+                    and payment.expires_at is not None
+                    and payment.expires_at <= timestamp
+                ):
+                    self._connection.execute(
+                        "UPDATE kkpay_payments SET gateway_status = ?, updated_at = ? "
+                        "WHERE order_id = ?",
+                        (int(OrderStatus.EXPIRED), timestamp, order_id),
                     )
                 row = self._row_for_order(order_id)
                 self._connection.execute("COMMIT")

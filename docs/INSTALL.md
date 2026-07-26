@@ -1,28 +1,56 @@
-# 安装、发布与私有部署
+# 安装、发布与自托管部署
 
-## 推荐：公开 Git 固定标签
+## 推荐：独立 TRON 收款模式
 
-这是目前最简单、最少运维的方案，不需要额外部署包索引服务或配置 GitHub 凭据。
-
-```bash
-pip install "kkpay-client @ git+https://github.com/halokik/kkpay-client.git@v0.3.0"
-```
-
-生产项目应固定版本标签，不要直接跟随 `main`。升级时先在 SDK 仓库运行测试并创建新标签，再在机器人项目中修改标签版本。
-
-需要 FastAPI Webhook 路由时安装可选依赖：
+`v0.4.0` 发布后，使用固定标签安装：
 
 ```bash
-pip install "kkpay-client[fastapi] @ git+https://github.com/halokik/kkpay-client.git@v0.3.0"
+pip install "kkpay-client @ git+https://github.com/halokik/kkpay-client.git@v0.4.0"
 ```
+
+它不需要 `KKPAY_BASE_URL`、`merchant_id` 或 `api_token`。每个使用者自行准备：
+
+1. 自己控制的 TRON 收款地址（`TRON_RECEIVER_ADDRESS`）；
+2. 一个能读取确认交易的 TRON 端点：默认 `https://api.trongrid.io`，也可配置自己的全节点/代理为 `TRON_API_URL`；
+3. 可选的、属于使用者自己的 `TRON_PRO_API_KEY`。
+
+示例环境变量：
+
+```bash
+TRON_RECEIVER_ADDRESS=Txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TRON_API_URL=https://api.trongrid.io
+TRON_PRO_API_KEY=your-own-key
+```
+
+收款程序使用 `DirectPaymentService` 创建本地订单，并从自己的机器人后台任务周期性调用 `poll_pending()`。该进程直接读取链上确认交易；无需访问包作者服务器或 `/opt/beusdt`。
+
+使用者仍必须保护自己的钱包私钥，但私钥**不应**配置给 SDK：SDK 只需要收款地址和公共链查询权限。
+
+## 可选：FastAPI 旧网关回调
+
+仅在兼容已有 KKPay 网关项目时安装：
+
+```bash
+pip install "kkpay-client[fastapi] @ git+https://github.com/halokik/kkpay-client.git@v0.4.0"
+```
+
+新项目不需要 FastAPI 回调来确认直接收款；直接模式用本地链上轮询。旧 `KKPayClient` / `PaymentService` API 仍可用，但它们仍要求一个 KKPay 兼容网关。
+
+## 发布新版本
+
+生产项目应固定版本标签，不要直接跟随 `main`。发布前在 SDK 仓库中运行：
+
+```bash
+python -m pip install -e '.[test,fastapi]'
+python -m pytest
+python -m build
+```
+
+验证通过后创建与 `pyproject.toml` 一致的 Git 标签并推送。不要把钱包私钥、TronGrid key、GitHub Token 或 SQLite 订单库打包进 release。
 
 ## 可选：内部私有分发
 
-若需在内网或私有 fork 中分发，可通过只读 Deploy Key 或私有 PyPI 安装。不要把 GitHub Token 写进 `requirements.txt`。
-
-## 可选：上传到已有私有 PyPI
-
-仅在已经有 devpi、pypiserver、Artifactory 等内部索引时使用：
+若需在内网或私有 fork 中分发，可通过只读 Deploy Key 或私有 PyPI 安装。不要把 GitHub Token 写进 `requirements.txt`。只有已具备 devpi、pypiserver、Artifactory 等内部索引时，才上传 wheel：
 
 ```bash
 python -m build
@@ -31,20 +59,3 @@ TWINE_USERNAME="__token__" \
 TWINE_PASSWORD="$PRIVATE_PYPI_TOKEN" \
 python -m twine upload --repository-url "$TWINE_REPOSITORY_URL" dist/*
 ```
-
-安装：
-
-```bash
-pip install --index-url "https://pypi.example.com/simple/" kkpay-client==0.3.0
-```
-
-凭据应通过 CI Secret、环境变量或机器级 pip 配置注入，不要写入源码、命令历史或项目依赖文件。
-
-## 新机器人接入清单
-
-1. 在 KK 网关中为机器人创建独立商户和收款地址。
-2. 把 `KKPAY_BASE_URL`、`KKPAY_MERCHANT_ID`、`KKPAY_API_TOKEN` 放入机器人私有配置；本机回环调用时另设公开收银台域名 `KKPAY_CHECKOUT_BASE_URL`。
-3. 使用 `SQLitePaymentStore` 保存本地订单、收款地址、实付币数量、状态、发货租约和必要业务 metadata。
-4. 使用 `payment_qr_png(payment)` 生成当前订单的收银台二维码，并同时展示实际币金额和地址。
-5. 暴露 HTTPS 回调地址，通过 `PaymentService.process_callback()` 或 `create_fastapi_router()` 验签、核对字段并一次性发货。
-6. 冒烟验证创建、查单、取消和重复回调，再精确重启目标 PM2 服务。
