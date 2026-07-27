@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add the public `kkpay-telegram-payment` Skill with an @mtp22bot-style
+  membership plan picker, premium Telegram emoji button IDs, and a
+  provider-neutral Telethon payment-menu template.
+
 ## 0.4.0 - 2026-07-26
 
 - Add `DirectPaymentService` and `AsyncDirectPaymentService`: standalone TRON collection that does not call a KKPay gateway or a package-author IP.

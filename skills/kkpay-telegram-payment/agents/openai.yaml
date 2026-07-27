@@ -1,0 +1,4 @@
+interface:
+  display_name: "KKPay Telegram Payment"
+  short_description: "Telegram 会员充值支付 UI、高级表情与订单模板"
+  default_prompt: "Use $kkpay-telegram-payment to add a Telegram membership payment menu with premium emoji buttons."

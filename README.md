@@ -15,6 +15,24 @@
 pip install "kkpay-client @ git+https://github.com/halokik/kkpay-client.git@v0.4.0"
 ```
 
+## Telegram 支付 UI Skill
+
+仓库附带一个可复用的 Codex Skill：
+[`skills/kkpay-telegram-payment`](skills/kkpay-telegram-payment)。它提供
+@mtp22bot 风格的会员套餐选择页、Telegram 高级表情按钮以及对接本 SDK 的
+Telethon 模板；其中不包含任何商户密钥、收款地址或特定支付商的签名协议。
+
+可使用 Codex 的 skill installer 从 GitHub 安装：
+
+```bash
+python3 /path/to/install-skill-from-github.py \
+  --repo halokik/kkpay-client \
+  --path skills/kkpay-telegram-payment
+```
+
+直接收款接入请使用下文的 `DirectPaymentService`；如需第三方托管支付，保留
+模板 UI 并调用目标机器人已有的、经过配置的支付适配器。
+
 ## 独立收款：不使用 KK 网关
 
 最小配置只需**使用者自己的收款地址**。可选的 `TRON_API_URL` 可以是 TronGrid，或使用者自己的 TRON 全节点/代理；它不是本项目作者的服务器。
